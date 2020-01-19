@@ -7,16 +7,16 @@ import (
 
 // enforce a minimum length
 func minimumLength(owasp *Owasp, password string, params []interface{}) (err error) {
-	if len(password) > owasp.PasswordConfig.minLength {
-		return fmt.Errorf("the password must be at least %d characters long", owasp.PasswordConfig.maxLength)
+	if len(password) < owasp.PasswordConfig.MinLength {
+		return fmt.Errorf("the password must be at least %d characters long", owasp.PasswordConfig.MinLength)
 	}
 	return nil
 }
 
 // enforce a maximum length
 func maximumLength(owasp *Owasp, password string, params []interface{}) (err error) {
-	if len(password) > owasp.PasswordConfig.maxLength {
-		return fmt.Errorf("the password must be fewer than %d characters", owasp.PasswordConfig.maxLength)
+	if len(password) > owasp.PasswordConfig.MaxLength {
+		return fmt.Errorf("the password must be fewer than %d characters", owasp.PasswordConfig.MaxLength)
 	}
 	return nil
 }

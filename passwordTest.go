@@ -1,5 +1,7 @@
 package owasp
 
+import "encoding/json"
+
 type Owasp struct {
 	PasswordConfig PasswordConfig
 	TestConfig     TestConfig
@@ -7,16 +9,16 @@ type Owasp struct {
 }
 
 type PasswordConfig struct {
-	allowPassPhrases       bool
-	maxLength              int
-	minLength              int
-	minPhraseLength        int
-	minOptionalTestsToPass int
+	AllowPassPhrases       bool
+	MaxLength              int
+	MinLength              int
+	MinPhraseLength        int
+	MinOptionalTestsToPass int
 }
 
 type TestConfig struct {
-	requiredTests []*requiredTest
-	optionalTests []*optionalTest
+	RequiredTests []*PasswordTest
+	OptionalTests []*PasswordTest
 }
 
 // These are configuration settings that should
@@ -24,58 +26,53 @@ type TestConfig struct {
 func DefaultPasswordConfig() *Owasp {
 	return &Owasp{
 		PasswordConfig: PasswordConfig{
-			allowPassPhrases:       true,
-			maxLength:              128,
-			minLength:              10,
-			minPhraseLength:        20,
-			minOptionalTestsToPass: 4,
+			AllowPassPhrases:       true,
+			MaxLength:              128,
+			MinLength:              10,
+			MinPhraseLength:        20,
+			MinOptionalTestsToPass: 4,
 		},
 		TestConfig: TestConfig{
-			requiredTests: nil,
-			optionalTests: defaultOptionalTests(),
+			RequiredTests: defaultRequiredTests(),
+			OptionalTests: defaultOptionalTests(),
 		},
 		TestResult: TestResult{
-			errors:              []error{},
-			failedTests:         []interface{}{},
-			passedTests:         []interface{}{},
-			requiredTestErrors:  []interface{}{},
-			optionalTestErrors:  []interface{}{},
-			isPassphrase:        false,
-			strong:              true,
-			optionalTestsPassed: 0,
+			Errors:              []string{},
+			FailedTests:         []interface{}{},
+			PassedTests:         []interface{}{},
+			RequiredTestErrors:  []interface{}{},
+			OptionalTestErrors:  []interface{}{},
+			IsPassphrase:        false,
+			Strong:              true,
+			OptionalTestsPassed: 0,
 		},
 	}
 }
 
 type TestResult struct {
-	errors              []error `json:"errors"`
-	failedTests         []interface{}
-	passedTests         []interface{}
-	requiredTestErrors  []interface{}
-	optionalTestErrors  []interface{}
-	isPassphrase        bool
-	strong              bool
-	optionalTestsPassed int
+	Errors              []string      `json:"errors"`
+	FailedTests         []interface{} `json:"failedTests"`
+	PassedTests         []interface{} `json:"passedTests"`
+	RequiredTestErrors  []interface{} `json:"requiredTestErrors"`
+	OptionalTestErrors  []interface{} `json:"optionalTestErrors"`
+	IsPassphrase        bool          `json:"isPassphrase"`
+	Strong              bool          `json:"strong"`
+	OptionalTestsPassed int           `json:"optionalTestsPassed"`
 }
 
-type requiredTest struct {
+type PasswordTest struct {
 	testMethod func(owasp *Owasp, password string, parameters []interface{}) (err error)
 	params     []interface{}
 }
 
 // An array of required tests. A password *must* pass these test s in order
 // to be considered strong.
-func defaultRequiredTests() []*requiredTest {
-	return []*requiredTest{
+func defaultRequiredTests() []*PasswordTest {
+	return []*PasswordTest{
 		{testMethod: minimumLength},
 		{testMethod: maximumLength},
 		{testMethod: preventRepeating},
 	}
-}
-
-type optionalTest struct {
-	testMethod func(owasp *Owasp, password string, parameters []interface{}) (err error)
-	params     []interface{}
 }
 
 // An array of optional tests. These tests are "optional" in two senses:
@@ -87,8 +84,8 @@ type optionalTest struct {
 //
 // 2. A password need only to pass this.configs.minOptionalTestsToPass
 //    number of these optional tests in order to be considered strong.
-func defaultOptionalTests() []*optionalTest {
-	return []*optionalTest{
+func defaultOptionalTests() []*PasswordTest {
+	return []*PasswordTest{
 		// require at least one lowercase letter
 		{
 			testMethod: atLeastOneOf,
@@ -112,56 +109,53 @@ func defaultOptionalTests() []*optionalTest {
 	}
 }
 
-func (owasp *Owasp) runTests(password string, requiredTests []*requiredTest,
-	optionalTests []*optionalTest) {
+func (owasp *Owasp) runTests(password string, requiredTests []*PasswordTest,
+	optionalTests []*PasswordTest) {
 
 	// Always submit the password/passphrase to the required tests
 	for k, v := range requiredTests {
 		err := v.testMethod(owasp, password, v.params)
 		if err != nil {
-			owasp.TestResult.strong = false
-			owasp.TestResult.errors = append(owasp.TestResult.errors, err)
-			owasp.TestResult.requiredTestErrors = append(owasp.TestResult.requiredTestErrors, err)
-			owasp.TestResult.failedTests = append(owasp.TestResult.failedTests, k)
+			owasp.TestResult.Strong = false
+			owasp.TestResult.Errors = append(owasp.TestResult.Errors, err.Error())
+			owasp.TestResult.RequiredTestErrors = append(owasp.TestResult.RequiredTestErrors, err.Error())
+			owasp.TestResult.FailedTests = append(owasp.TestResult.FailedTests, k)
 		} else {
-			owasp.TestResult.passedTests = append(owasp.TestResult.passedTests, k)
+			owasp.TestResult.PassedTests = append(owasp.TestResult.PassedTests, k)
 		}
 	}
 	// OPTIONAL TESTS:
 	for k, v := range optionalTests {
 		err := v.testMethod(owasp, password, v.params)
 		if err != nil {
-			owasp.TestResult.errors = append(owasp.TestResult.errors, err)
-			owasp.TestResult.optionalTestErrors = append(owasp.TestResult.optionalTestErrors, err)
-			owasp.TestResult.failedTests = append(owasp.TestResult.failedTests, len(requiredTests)+k)
+			owasp.TestResult.Errors = append(owasp.TestResult.Errors, err.Error())
+			owasp.TestResult.OptionalTestErrors = append(owasp.TestResult.OptionalTestErrors, err.Error())
+			owasp.TestResult.FailedTests = append(owasp.TestResult.FailedTests, len(requiredTests)+k)
 		} else {
-			owasp.TestResult.optionalTestsPassed++
-			owasp.TestResult.passedTests = append(owasp.TestResult.passedTests, len(requiredTests)+k)
+			owasp.TestResult.OptionalTestsPassed++
+			owasp.TestResult.PassedTests = append(owasp.TestResult.PassedTests, len(requiredTests)+k)
 		}
 	}
 }
 
 // This method tests password strength
-func (owasp *Owasp) TestPassword(password string) TestResult {
-	requiredTests := defaultRequiredTests()
-	optionalTests := defaultOptionalTests()
-
-	owasp.runTests(password, requiredTests, optionalTests)
+func (owasp *Owasp) TestPassword(password string) ([]byte, error) {
+	owasp.runTests(password, owasp.TestConfig.RequiredTests, owasp.TestConfig.OptionalTests)
 
 	// If configured to allow passphrases, and if the password is of a
 	// sufficient length to consider it a passphrase, exempt it from the
 	// optional tests.
-	if owasp.PasswordConfig.allowPassPhrases == true &&
-		len(password) >= owasp.PasswordConfig.minPhraseLength {
-		owasp.TestResult.isPassphrase = true
+	if owasp.PasswordConfig.AllowPassPhrases == true &&
+		len(password) >= owasp.PasswordConfig.MinPhraseLength {
+		owasp.TestResult.IsPassphrase = true
 	}
 
 	// If the password is not a passphrase, assert that it has passed a
 	// sufficient number of the optional tests, per the configuration
-	if !owasp.TestResult.isPassphrase &&
-		owasp.TestResult.optionalTestsPassed < owasp.PasswordConfig.minOptionalTestsToPass {
-		owasp.TestResult.strong = false
+	if !owasp.TestResult.IsPassphrase &&
+		owasp.TestResult.OptionalTestsPassed < owasp.PasswordConfig.MinOptionalTestsToPass {
+		owasp.TestResult.Strong = false
 	}
 
-	return owasp.TestResult
+	return json.Marshal(owasp.TestResult)
 }
